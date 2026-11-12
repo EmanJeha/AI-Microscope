@@ -1,0 +1,228 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AI Microscope · MIS</title>
+<style>
+  * { box-sizing: border-box; }
+  body { margin: 0; font-family: Inter, "Segoe UI", Arial, sans-serif; background: #EEF3F9; color: #1E2A3A; }
+  header { background: #16325C; color: #fff; padding: 14px 24px; border-bottom: 5px solid #F28C28; display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+  header h1 { margin: 0; font-size: 26px; }
+  header span { opacity: .85; }
+  main { display: grid; grid-template-columns: minmax(320px, 640px) 1fr; gap: 20px; padding: 20px; }
+  @media (max-width: 900px) { main { grid-template-columns: 1fr; } }
+  .card { background: #fff; border-radius: 16px; padding: 16px 18px; border: 2px solid #D5DEEA; }
+  h2 { margin: 0 0 10px; font-size: 19px; color: #16325C; }
+  .stage { position: relative; background: #0E1A2C; border-radius: 16px; overflow: hidden; aspect-ratio: 4 / 3; display: grid; place-items: center; }
+  .stage video, .stage img { width: 100%; height: 100%; object-fit: cover; }
+  .stage .hint { position: absolute; color: #9fb3cc; text-align: center; padding: 20px; font-size: 15px; }
+  .ring { position: absolute; inset: 12%; border: 3px dashed rgba(255,255,255,.55); border-radius: 50%; pointer-events: none; }
+  button, .filebtn { font: inherit; font-weight: 700; padding: 9px 14px; border: 0; border-radius: 999px; background: #0FA3B1; color: #fff; cursor: pointer; display: inline-block; }
+  button.sec, .filebtn.sec { background: #fff; color: #16325C; border: 2px solid #16325C; }
+  button.org { background: #F28C28; }
+  button:disabled { opacity: .45; cursor: not-allowed; }
+  .row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+  input[type=file] { display: none; }
+  .cls { border: 2px solid #D5DEEA; border-radius: 14px; padding: 10px 12px; margin-bottom: 10px; }
+  .cls .top { display: flex; gap: 8px; align-items: center; }
+  .cls input.name { flex: 1; font: inherit; font-weight: 800; font-size: 17px; border: 0; border-bottom: 2px dashed #c9d3e2; padding: 4px 2px; min-width: 0; }
+  .cls .dot { width: 18px; height: 18px; border-radius: 50%; flex: none; }
+  .cls .n { font-weight: 800; color: #55657A; white-space: nowrap; }
+  .thumbs { display: flex; gap: 4px; flex-wrap: wrap; margin-top: 8px; }
+  .thumbs img { width: 38px; height: 38px; border-radius: 6px; object-fit: cover; }
+  .x { background: none; color: #E5484D; padding: 2px 6px; font-size: 18px; }
+  .pred { display: grid; gap: 8px; }
+  .bar { display: grid; grid-template-columns: 150px 1fr 54px; gap: 8px; align-items: center; font-weight: 700; }
+  .bar .t { height: 18px; border-radius: 9px; background: #E3E9F1; overflow: hidden; }
+  .bar .t i { display: block; height: 100%; width: 0; border-radius: 9px; transition: width .25s; }
+  .big { font-size: 30px; font-weight: 800; margin: 4px 0 10px; }
+  #status { color: #55657A; margin: 10px 0 0; }
+  .note { font-size: 14px; color: #55657A; }
+  .acc { font-size: 15px; }
+  .acc table { border-collapse: collapse; margin-top: 6px; }
+  .acc td, .acc th { border: 1px solid #D5DEEA; padding: 4px 8px; text-align: center; }
+</style>
+</head>
+<body>
+<header><h1>🔬 AI Microscope</h1><span>Teach the computer to recognise cells · MIS ICT + Biology</span></header>
+<main>
+  <section>
+    <div class="stage" id="stage">
+      <video id="video" autoplay playsinline muted style="display:none"></video>
+      <img id="still" alt="" style="display:none">
+      <div class="ring"></div>
+      <div class="hint" id="hint">Start the camera (hold your phone or webcam over the microscope eyepiece),<br>or upload photos of your slides.</div>
+    </div>
+    <div class="row" style="margin-top:12px">
+      <button id="camBtn">📷 Start camera</button>
+      <button id="flipBtn" class="sec" disabled>🔄 Switch camera</button>
+      <label class="filebtn sec">🖼️ Test a photo<input type="file" id="testFile" accept="image/*"></label>
+    </div>
+    <p id="status">Step 1: create your classes on the right. Step 2: add at least 10 examples to each class.</p>
+    <div class="card" style="margin-top:14px">
+      <h2>🤖 The AI thinks it is…</h2>
+      <div class="big" id="predName">–</div>
+      <div class="pred" id="bars"></div>
+      <p class="note">The AI compares what it sees with every example you gave it, then votes with the 5 most similar examples (k-nearest neighbours).</p>
+    </div>
+  </section>
+  <section>
+    <div class="card">
+      <h2>📚 Training data: your classes</h2>
+      <div id="classes"></div>
+      <div class="row"><button class="sec" id="addCls">➕ Add a class</button></div>
+    </div>
+    <div class="card" style="margin-top:14px">
+      <h2>🧪 How good is your AI?</h2>
+      <div class="row"><button class="org" id="accBtn">Check accuracy</button></div>
+      <div class="acc" id="acc"><p class="note">The AI hides each example in turn and tries to guess it from all the others. This is a fair test, because it never sees the answer.</p></div>
+    </div>
+    <div class="card" style="margin-top:14px">
+      <h2>💾 Save your work</h2>
+      <div class="row"><button class="sec" id="saveBtn">⬇ Download training data</button><label class="filebtn sec">⬆ Load training data<input type="file" id="loadFile" accept=".json,application/json"></label><button class="sec" id="clearBtn">🗑 Clear all</button></div>
+      <p class="note">Your examples stay on this device. Nothing is uploaded.</p>
+    </div>
+  </section>
+</main>
+<script>
+// ======== MIS · AI Microscope · a k-nearest-neighbour image classifier that runs in the browser ========
+const $ = (id) => document.getElementById(id);
+const COLORS = ['#0FA3B1', '#F28C28', '#7B5CD6', '#E5484D', '#2BB673', '#2F7FD8'];
+let classes = [
+  { name: 'Onion cell', samples: [] },
+  { name: 'Cheek cell', samples: [] },
+  { name: 'Leaf cell', samples: [] },
+];
+let stream = null, facing = 'environment', live = false;
+const video = $('video'), still = $('still');
+const work = document.createElement('canvas'); work.width = work.height = 48;
+const wctx = work.getContext('2d', { willReadFrequently: true });
+const thumbC = document.createElement('canvas'); thumbC.width = thumbC.height = 64;
+
+// ---- 1. Turn a picture into numbers (the "features") ----
+function grab(src) {
+  // centre square crop, shrunk to 48 x 48 pixels
+  const w = src.videoWidth || src.naturalWidth, h = src.videoHeight || src.naturalHeight;
+  const s = Math.min(w, h) * 0.76, sx = (w - s) / 2, sy = (h - s) / 2;
+  wctx.drawImage(src, sx, sy, s, s, 0, 0, 48, 48);
+  thumbC.getContext('2d').drawImage(src, sx, sy, s, s, 0, 0, 64, 64);
+  return wctx.getImageData(0, 0, 48, 48).data;
+}
+function features(px) {
+  // (a) colour: a hue + saturation + brightness histogram
+  const hist = new Array(12 * 3 + 6).fill(0);
+  // (b) texture: how much brightness changes between neighbouring pixels (cell walls, dots)
+  const lum = new Float32Array(48 * 48);
+  for (let i = 0, p = 0; i < px.length; i += 4, p++) {
+    const r = px[i] / 255, g = px[i + 1] / 255, b = px[i + 2] / 255;
+    const mx = Math.max(r, g, b), mn = Math.min(r, g, b), d = mx - mn;
+    let hh = 0; if (d) hh = mx === r ? ((g - b) / d) % 6 : mx === g ? (b - r) / d + 2 : (r - g) / d + 4; hh = (hh * 60 + 360) % 360;
+    const sat = mx ? d / mx : 0;
+    hist[Math.min(11, Math.floor(hh / 30)) * 3 + Math.min(2, Math.floor(sat * 3))] += 1;
+    hist[36 + Math.min(5, Math.floor(mx * 6))] += 1;
+    lum[p] = 0.3 * r + 0.59 * g + 0.11 * b;
+  }
+  const tex = new Array(8).fill(0);
+  for (let y = 1; y < 47; y++) for (let x = 1; x < 47; x++) {
+    const p = y * 48 + x, gx = lum[p + 1] - lum[p - 1], gy = lum[p + 48] - lum[p - 48];
+    tex[Math.min(7, Math.floor(Math.hypot(gx, gy) * 8))] += 1;
+  }
+  const norm = (v) => { const s = Math.hypot(...v) || 1; return v.map((x) => x / s); };
+  return [...norm(hist), ...norm(tex).map((x) => x * 0.8)];
+}
+// ---- 2. Compare with every example and vote (k-nearest neighbours) ----
+const dist = (a, b) => { let s = 0; for (let i = 0; i < a.length; i++) { const d = a[i] - b[i]; s += d * d; } return Math.sqrt(s); };
+function classify(f, skip) {
+  const all = [];
+  classes.forEach((c, ci) => c.samples.forEach((s, si) => { if (skip && skip[0] === ci && skip[1] === si) return; all.push([dist(f, s.f), ci]); }));
+  if (!all.length) return null;
+  all.sort((a, b) => a[0] - b[0]);
+  const k = Math.min(5, all.length), votes = new Array(classes.length).fill(0);
+  for (let i = 0; i < k; i++) votes[all[i][1]] += 1 / (all[i][0] + 0.05);
+  const tot = votes.reduce((a, b) => a + b, 0) || 1;
+  const conf = votes.map((v) => v / tot);
+  let best = 0; conf.forEach((v, i) => { if (v > conf[best]) best = i; });
+  return { best, conf };
+}
+
+// ---- 3. Screen ----
+function drawClasses() {
+  $('classes').innerHTML = '';
+  classes.forEach((c, i) => {
+    const d = document.createElement('div'); d.className = 'cls';
+    d.innerHTML = `<div class="top"><span class="dot" style="background:${COLORS[i % 6]}"></span><input class="name" value="${c.name.replace(/"/g, '&quot;')}" maxlength="24"><span class="n">${c.samples.length} examples</span>${classes.length > 2 ? '<button class="x" title="Delete class">✕</button>' : ''}</div>
+      <div class="row" style="margin-top:8px"><button class="add1" ${live ? '' : 'disabled'}>📸 Add 1</button><button class="add10 sec" ${live ? '' : 'disabled'}>📸 Add 10 (hold still)</button><label class="filebtn sec">🖼️ Upload photos<input type="file" accept="image/*" multiple></label></div>
+      <div class="thumbs">${c.samples.slice(-14).map((s) => `<img src="${s.t}">`).join('')}</div>`;
+    $('classes').appendChild(d);
+    d.querySelector('.name').oninput = (e) => { c.name = e.target.value || 'Class ' + (i + 1); paintBars(null); };
+    const x = d.querySelector('.x'); if (x) x.onclick = () => { if (confirm('Delete the class "' + c.name + '"?')) { classes.splice(i, 1); drawClasses(); } };
+    d.querySelector('.add1').onclick = () => addFromCam(i, 1);
+    d.querySelector('.add10').onclick = () => addFromCam(i, 10);
+    d.querySelector('input[type=file]').onchange = (e) => addFiles(i, e.target.files);
+  });
+  paintBars(null);
+}
+function paintBars(r) {
+  $('bars').innerHTML = classes.map((c, i) => `<div class="bar"><span>${c.name}</span><span class="t"><i style="width:${r ? Math.round(r.conf[i] * 100) : 0}%;background:${COLORS[i % 6]}"></i></span><span>${r ? Math.round(r.conf[i] * 100) + '%' : ''}</span></div>`).join('');
+  $('predName').textContent = r ? classes[r.best].name : '–';
+  $('predName').style.color = r ? COLORS[r.best % 6] : '#1E2A3A';
+}
+const ready = () => classes.filter((c) => c.samples.length).length >= 2;
+function addSample(i, src) { const f = features(grab(src)); classes[i].samples.push({ f, t: thumbC.toDataURL('image/jpeg', 0.7) }); }
+async function addFromCam(i, n) {
+  for (let k = 0; k < n; k++) { addSample(i, video); if (n > 1) { drawClasses(); await new Promise((r) => setTimeout(r, 180)); } }
+  drawClasses(); $('status').textContent = ready() ? '✅ The AI is learning. Point the camera at a slide and watch the guess change.' : 'Add examples to at least 2 classes.';
+}
+function loadImg(file) { return new Promise((res, rej) => { const im = new Image(); im.onload = () => res(im); im.onerror = rej; im.src = URL.createObjectURL(file); }); }
+async function addFiles(i, files) {
+  for (const f of files) { try { addSample(i, await loadImg(f)); } catch (e) { } }
+  drawClasses(); $('status').textContent = `Added ${files.length} photo(s) to "${classes[i].name}".`;
+}
+
+// ---- 4. Camera + live prediction ----
+async function startCam() {
+  try {
+    if (stream) stream.getTracks().forEach((t) => t.stop());
+    stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: facing, width: 640, height: 480 } });
+    video.srcObject = stream; await video.play();
+    video.style.display = 'block'; still.style.display = 'none'; $('hint').style.display = 'none';
+    live = true; $('flipBtn').disabled = false; $('camBtn').textContent = '⏹ Stop camera'; drawClasses();
+    $('status').textContent = 'Camera on. Choose a class and press 📸 Add 10 while the slide is in view.';
+  } catch (e) { $('status').textContent = '⚠️ Camera blocked: click the camera icon in the address bar and choose Allow (and use the https:// link).'; }
+}
+function stopCam() { if (stream) stream.getTracks().forEach((t) => t.stop()); stream = null; live = false; video.style.display = 'none'; $('hint').style.display = 'block'; $('camBtn').textContent = '📷 Start camera'; $('flipBtn').disabled = true; drawClasses(); }
+$('camBtn').onclick = () => live ? stopCam() : startCam();
+$('flipBtn').onclick = () => { facing = facing === 'environment' ? 'user' : 'environment'; startCam(); };
+let tick = 0;
+function loop() { if (live && ready() && video.videoWidth && ++tick % 6 === 0) paintBars(classify(features(grab(video)))); requestAnimationFrame(loop); }
+loop();
+$('testFile').onchange = async (e) => {
+  const f = e.target.files[0]; if (!f) return;
+  if (live) stopCam();
+  const im = await loadImg(f); still.src = im.src; still.style.display = 'block'; $('hint').style.display = 'none';
+  if (!ready()) { $('status').textContent = 'Add examples to at least 2 classes first.'; return; }
+  const r = classify(features(grab(im))); paintBars(r);
+  $('status').textContent = `The AI says: ${classes[r.best].name} (${Math.round(r.conf[r.best] * 100)}% sure).`;
+};
+
+// ---- 5. Accuracy: leave-one-out test ----
+$('accBtn').onclick = () => {
+  if (!ready()) { $('acc').innerHTML = '<p class="note">Add examples to at least 2 classes first.</p>'; return; }
+  const n = classes.length, M = Array.from({ length: n }, () => new Array(n).fill(0)); let ok = 0, tot = 0;
+  classes.forEach((c, ci) => c.samples.forEach((s, si) => { const r = classify(s.f, [ci, si]); if (!r) return; M[ci][r.best]++; tot++; if (r.best === ci) ok++; }));
+  const pct = tot ? Math.round(ok / tot * 100) : 0;
+  $('acc').innerHTML = `<p style="font-size:26px;font-weight:800;margin:6px 0;color:${pct >= 80 ? '#2BB673' : '#F28C28'}">${pct}% correct (${ok} of ${tot})</p>
+    <table><tr><th>real ↓ / AI guess →</th>${classes.map((c) => `<th>${c.name}</th>`).join('')}</tr>${classes.map((c, i) => `<tr><th>${c.name}</th>${M[i].map((v, j) => `<td style="background:${v && i === j ? '#E8F7EE' : v ? '#FFE9E9' : '#fff'}">${v}</td>`).join('')}</tr>`).join('')}</table>
+    <p class="note">Green = right, red = mistakes. ${pct < 80 ? 'Tip: add more examples, with different slides and the same light.' : 'Great model! Now test it on a NEW slide it has never seen.'}</p>`;
+};
+// ---- 6. Save / load ----
+$('saveBtn').onclick = () => { const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([JSON.stringify(classes)], { type: 'application/json' })); a.download = 'ai_microscope_training.json'; a.click(); };
+$('loadFile').onchange = async (e) => { try { classes = JSON.parse(await e.target.files[0].text()); drawClasses(); $('status').textContent = '✅ Training data loaded.'; } catch (er) { $('status').textContent = '⚠️ That file is not AI Microscope training data.'; } };
+$('clearBtn').onclick = () => { if (confirm('Delete all examples?')) { classes.forEach((c) => c.samples = []); drawClasses(); paintBars(null); } };
+$('addCls').onclick = () => { if (classes.length >= 6) return; classes.push({ name: 'Class ' + (classes.length + 1), samples: [] }); drawClasses(); };
+drawClasses();
+window.__AI = { classes, features, classify, grab };
+</script>
+</body>
+</html>
